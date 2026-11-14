@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rolador de d6</title>
+<style>
+  :root { color-scheme: dark; font: 16px system-ui, sans-serif; }
+  body { margin: 0; background: #171b23; color: #f3f5f9; }
+  main { display: grid; justify-items: center; gap: 14px; padding: 16px; }
+  h1 { margin: 0; font-size: 1.1rem; }
+  form { display: grid; gap: 12px; width: 100%; }
+  .inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  label { display: grid; gap: 4px; font-size: .85rem; }
+  input { box-sizing: border-box; width: 100%; padding: 8px;
+    background: #262e3d; color: inherit; border: 1px solid #7c879b;
+    border-radius: 6px; font: inherit; }
+  button { min-height: 44px; border: 0; border-radius: 8px;
+    background: #b9f3d5; color: #11251b; font: inherit;
+    font-weight: 700; cursor: pointer; }
+  :focus-visible { outline: 2px solid white; outline-offset: 2px; }
+  #faces { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
+    max-height: 126px; overflow-y: auto; width: 100%; box-sizing: border-box; }
+  .die { display: grid; place-items: center; width: 34px; height: 34px;
+    border: 1px solid #7c879b; border-radius: 7px; background: #262e3d;
+    font-weight: 700; }
+  #status { margin: 0; text-align: center; overflow-wrap: anywhere; }
+</style>
+<main>
+  <h1>Rolador de d6</h1>
+  <form id="roller">
+    <div class="inputs">
+      <label>Quantidade de dados
+        <input id="count" type="number" min="1" max="100" step="1" value="1" required>
+      </label>
+      <label>Bônus
+        <input id="bonus" type="number" min="-1000000" max="1000000" step="1" value="0" required>
+      </label>
+    </div>
+    <button type="submit">Rolar</button>
+  </form>
+  <div id="faces" role="list" aria-label="Faces roladas"></div>
+  <p id="status" role="status">Cada + vale 1 ponto.</p>
+</main>
+<script>
+  const faces = ['', '', '', '+', '+', '++'];
+  const count = document.querySelector('#count');
+  const bonus = document.querySelector('#bonus');
+  const results = document.querySelector('#faces');
+  const status = document.querySelector('#status');
+
+  document.querySelector('#roller').addEventListener('submit', event => {
+    event.preventDefault();
+
+    const dice = document.createDocumentFragment();
+    let points = 0;
+    for (let i = 0; i < count.valueAsNumber; i++) {
+      const face = faces[Math.floor(Math.random() * faces.length)];
+      points += face.length;
+      const die = document.createElement('span');
+      die.className = 'die';
+      die.setAttribute('role', 'listitem');
+      die.setAttribute('aria-label', face || 'Face vazia');
+      die.textContent = face;
+      dice.append(die);
+    }
+
+    results.replaceChildren(dice);
+    const modifier = bonus.valueAsNumber;
+    const sign = modifier < 0 ? '−' : '+';
+    status.textContent = `Total: ${points + modifier} (${points} ${sign} ${Math.abs(modifier)})`;
+  });
+</script>
+</html>
