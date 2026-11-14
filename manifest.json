@@ -1,0 +1,14 @@
+{
+  "name": "Rolador de d6",
+  "version": "1.1.0",
+  "manifest_version": 1,
+  "description": "Rola vários d6 com faces vazias, + e ++ e soma um bônus ao total.",
+  "icon": "./icon.svg",
+  "action": {
+    "title": "Rolador de d6",
+    "icon": "./icon.svg",
+    "popover": "./index.html",
+    "width": 320,
+    "height": 400
+  }
+}
