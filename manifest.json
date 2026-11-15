@@ -1,14 +1,14 @@
 {
   "name": "Bandeja CDM",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "manifest_version": 1,
-  "description": "Bandeja 3D para d4, d6, d8, d10 e d12 com símbolos X, O e P e histórico recente.",
+  "description": "Bandeja 3D com mini ficha, testes de perícia, dados avulsos e rerrolagem.",
   "icon": "/RoladordedadosCDM/icon.svg",
   "action": {
     "title": "Bandeja CDM",
     "icon": "/RoladordedadosCDM/icon.svg",
     "popover": "/RoladordedadosCDM/index.html",
     "width": 460,
-    "height": 620
+    "height": 720
   }
 }
