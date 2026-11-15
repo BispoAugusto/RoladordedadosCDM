@@ -10,7 +10,7 @@
 h1,h2,p{margin:0}h1{font:600 28px Georgia,serif}h2{font-size:15px}
 button{font:inherit;cursor:pointer;color:inherit}button:disabled{cursor:default;opacity:.48}
 button:focus-visible{outline:2px solid #ffe1a2;outline-offset:2px}
-#picker{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
+#picker,#manual{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
 .pick{min-width:0;background:#23272a;border:1px solid #505052;border-radius:8px;padding:5px 2px;text-align:center}
 .kind{width:100%;min-height:36px;border:0;background:transparent;color:var(--accent);font-weight:800}
 .qty{display:flex;justify-content:center;align-items:center;gap:3px}
@@ -25,33 +25,67 @@ ol{list-style:none;margin:7px 0 0;padding:0;display:grid;gap:6px}
 li{background:#23272a;border:1px solid #393d3e;border-radius:7px;padding:8px;display:grid;gap:4px}
 .record{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}.faces{font-size:.83rem;color:#d7d1c4;overflow-wrap:anywhere}
 @media(max-width:310px){main{padding:8px}.qty{gap:1px}.qty button{min-width:20px}}
+
+[hidden]{display:none!important}
+#skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:6px}
+.skill{display:grid;grid-template-columns:1fr 48px;gap:4px;align-items:center}
+.skill button,.skill input,#manual button,select{min-height:34px;background:#282c2e;border:1px solid #5d5a51;border-radius:6px;color:inherit;padding:4px}
+.skill button[aria-pressed="true"]{border-color:#e9c785;color:#ffe1a2}
+.skill input{width:100%;font:inherit;text-align:center}
+#setup{display:grid;gap:8px}#extra{display:grid;gap:5px}
+#manual button{color:var(--accent);font-weight:700}
+#die-targets{position:absolute;inset:0;pointer-events:none}
+#die-targets button{position:absolute;transform:translate(-50%,-50%);pointer-events:auto;background:transparent;border:2px solid transparent;border-radius:9px}
+#die-targets button:hover,#die-targets button:focus-visible{border-color:#fff0bc;background:#fff0bc15}
+.critical{color:#ffdc87}
+details>summary{cursor:pointer}
+@media(max-width:370px){#picker,#manual{grid-template-columns:repeat(3,minmax(0,1fr))}}
 </style>
 </head>
 <body>
 <main>
   <h1>Bandeja CDM</h1>
-  <div id="picker" aria-label="Quantidade por tipo de dado"></div>
-  <div class="actions"><button id="roll" type="button">Rolar</button><button id="clear" type="button">Zerar seleção</button></div>
-  <div class="tray"><canvas id="tray" aria-label="Bandeja com dados tridimensionais"></canvas><p id="hint">Escolha os dados e clique em Rolar.</p></div>
-  <p id="summary" role="status"></p>
+  <section aria-labelledby="skills-title">
+    <h2 id="skills-title">Mini ficha</h2><p class="muted">Anote o bônus e selecione uma perícia.</p>
+    <div id="skills"></div>
+  </section>
+  <section id="setup" hidden aria-label="Configuração do teste">
+    <label><strong id="test-name"></strong> · 4 dados de
+      <select id="base" aria-label="Tamanho dos quatro dados do teste"></select>
+    </label>
+    <details id="extra"><summary>Dados adicionais <span id="extra-count"></span></summary><div id="picker" aria-label="Dados adicionais"></div></details>
+    <div class="actions"><button id="roll" type="button">Rolar teste</button></div>
+  </section>
+  <section aria-label="Rolagem livre">
+    <h2>Rolar e adicionar à bandeja</h2>
+    <div id="manual"></div>
+  </section>
+  <div class="tray"><canvas id="tray" aria-label="Bandeja com dados tridimensionais"></canvas><div id="die-targets"></div><p id="hint">Selecione uma perícia ou role um dado avulso.</p></div>
+  <p id="summary" role="status"></p><p id="reroll-hint" class="muted" hidden>Clique em um dado na bandeja para rerrolá-lo.</p>
+  <div class="actions"><button id="clear" type="button" disabled>Limpar bandeja</button></div>
   <section aria-labelledby="history-title"><h2 id="history-title">Rolagens recentes</h2><p id="empty" class="muted">Nenhuma rolagem por enquanto.</p><ol id="history"></ol></section>
 </main>
 <script>
 "use strict";
 
 const types = [
-  { sides: 4, faces: ["", "", "", "O"], color: "#edb879", rgb: [223, 156, 87] },
-  { sides: 6, faces: ["", "", "", "X", "O", "O"], color: "#91dfcd", rgb: [93, 193, 169] },
-  { sides: 8, faces: ["", "", "", "", "X", "O", "O", "P"], color: "#b9bbff", rgb: [146, 150, 226] },
-  { sides: 10, faces: ["", "", "", "", "", "X", "O", "O", "P", "P"], color: "#ffaaaa", rgb: [225, 139, 139] },
-  { sides: 12, faces: ["", "", "", "", "", "", "X", "O", "O", "P", "P", "P"], color: "#d5e892", rgb: [172, 196, 108] }
-];
+  [4, "--_+", "#edb879", [223,156,87]],
+  [6, "--__++", "#91dfcd", [93,193,169]],
+  [8, "--___+++", "#b9bbff", [146,150,226]],
+  [10, "--____++++", "#ffaaaa", [225,139,139]],
+  [12, "--_____+++++", "#d5e892", [172,196,108]],
+  [20, "----________+++++++*", "#ffe08f", [235,184,82]]
+].map(([sides,pattern,color,rgb]) => ({
+  sides,color,rgb,faces:[...pattern].map(face => face === "_" ? "" : face)
+}));
 const maxDice = 30;
 const historyLimit = 8;
 const storageKey = "cdm-dice-history-v2";
+const bonusKey = "cdm-skill-bonuses-v1";
+const skillNames = ["Atletismo","Furtividade","Percepção","Investigação","Persuasão","Sobrevivência"];
 const byId = id => document.getElementById(id);
-const counts = new Map(types.map(({sides}) => [sides, 0]));
-const selectedCount = () => [...counts.values()].reduce((sum, value) => sum + value, 0);
+const counts = new Map(types.map(({sides}) => [sides,0]));
+const selectedCount = () => [...counts.values()].reduce((sum,value) => sum+value,0);
 const canvas = byId("tray");
 const ctx = canvas.getContext("2d");
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
@@ -112,7 +146,8 @@ const shapes = new Map([
   [6, mesh(cube)],
   [8, mesh([[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]])],
   [10, mesh(dual(antiprism))],
-  [12, mesh(dual(ico))]
+  [12, mesh(dual(ico))],
+  [20, mesh(ico)]
 ]);
 
 function rotate([x,y,z], a, b, c) {
@@ -156,7 +191,7 @@ function drawDie(die, x, y, size, a, b, c, settled) {
       ctx.font = "800 " + Math.round(size * (type.sides >= 10 ? .50 : .65) * (.65 + .35*face.normal[2])) + "px system-ui";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(symbol,px,py);
+      ctx.fillText(symbol === "-" ? "−" : symbol,px,py);
     }
   }
   if (settled) {
@@ -169,13 +204,13 @@ function drawDie(die, x, y, size, a, b, c, settled) {
 }
 
 let dice = [];
-let started = null;
 let running = false;
 let trayWidth = 1;
 let trayHeight = 1;
 let columns = 1;
 let size = 25;
 const duration = 1250;
+let moving = new Set();
 function layout() {
   trayWidth = canvas.parentElement.clientWidth;
   const capacity = Math.max(1, Math.floor(trayWidth / 76));
@@ -190,22 +225,28 @@ function layout() {
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 }
 
+function position(index) {
+  const rows = Math.ceil(dice.length / columns);
+  const row = Math.floor(index / columns);
+  const inRow = Math.min(columns,dice.length-row*columns);
+  const spacing = Math.min(95,trayWidth/columns);
+  return [
+    trayWidth/2 + (index%columns-(inRow-1)/2)*spacing,
+    (trayHeight-(rows-1)*87)/2 + row*87 - 8
+  ];
+}
+
 function render(progress) {
   ctx.clearRect(0,0,trayWidth,trayHeight);
-  const rows = Math.ceil(dice.length / columns);
   dice.forEach((die,index) => {
-    const row = Math.floor(index/columns);
-    const inRow = Math.min(columns,dice.length-row*columns);
-    const spacing = Math.min(95,trayWidth/columns);
-    const targetX = trayWidth/2 + (index%columns-(inRow-1)/2)*spacing;
-    const targetY = (trayHeight-(rows-1)*87)/2 + row*87 - 8;
-    const remaining = 1-progress;
+    const [targetX,targetY] = position(index);
+    const remaining = moving.has(index) ? 1-progress : 0;
     const bounce = Math.abs(Math.sin(progress*Math.PI*4))*remaining*27;
     const startX = trayWidth*(die.direction > 0 ? .16 : .84);
     const x = targetX + (startX-targetX)*remaining**2 + Math.sin(progress*10+index)*remaining*12;
     const y = targetY - bounce - remaining**2*25;
     drawDie(die,x,y,size,remaining**1.6*die.spin,remaining**1.5*die.spin*.8,
-      die.direction*remaining**1.5*die.spin*.65,progress === 1);
+      die.direction*remaining**1.5*die.spin*.65,remaining === 0);
   });
 }
 
@@ -248,49 +289,133 @@ function renderHistory() {
   }));
 }
 
-function completeRoll() {
+const skillControls = new Map();
+let selectedSkill = null;
+let table = null;
+let appliedRecord = null;
+
+function readBonuses() {
+  try { return JSON.parse(localStorage.getItem(bonusKey)) || {}; }
+  catch { return {}; }
+}
+const bonuses = readBonuses();
+function saveBonuses() {
+  try {
+    const values = Object.fromEntries([...skillControls].map(([name, controls]) => [
+      name, controls.input.validity.valid ? controls.input.valueAsNumber : 0
+    ]));
+    localStorage.setItem(bonusKey,JSON.stringify(values));
+  } catch { /* Keep form values in memory if storage is blocked. */ }
+}
+
+function faceLabel(face) {
+  return face === "-" ? "−" : face || "vazia";
+}
+
+function renderTargets(focusIndex) {
+  byId("reroll-hint").hidden = !dice.length;
+
+  const layer = byId("die-targets");
+  const activeIndex = layer.contains(document.activeElement) ? Number(document.activeElement.dataset.die) : null;
+  const targets = dice.map((die,index) => {
+    const face = faceLabel(die.type.faces[die.result]);
+    const label = "Rerrolar dado "+(index+1)+", d"+die.type.sides+", face "+face;
+    const button = makeButton("",label,()=>{
+      if (running) return;
+      dice[index] = makeDie(die.type);
+      beginRoll([index],index);
+    });
+    const [x,y] = position(index);
+    button.title = label;
+    button.dataset.die = index;
+    button.style.left = x+"px";
+    button.style.top = y+"px";
+    button.style.width = button.style.height = (size*2+10)+"px";
+    return button;
+  });
+  layer.replaceChildren(...targets);
+  targets[focusIndex ?? activeIndex]?.focus({preventScroll:true});
+}
+
+function completeRoll(focusIndex) {
   running = false;
   render(1);
-  const tally = {"":0,X:0,O:0,P:0};
-  for (const die of dice) tally[die.type.faces[die.result]]++;
-  const summary = tally.X+" X · "+tally.O+" O · "+tally.P+" P · "+tally[""]+" vazias";
+  renderTargets(focusIndex);
+  let modifier = 0;
+  let criticals = 0;
+  for (const die of dice) {
+    const face = die.type.faces[die.result];
+    if (face === "+") modifier++;
+    if (face === "-") modifier--;
+    if (face === "*") criticals++;
+  }
+  const sign = modifier < 0 ? " − " : " + ";
+  const summary = table.name + " · Total " + (table.bonus+modifier) +
+    " (" + table.bonus + sign + Math.abs(modifier) + ")" +
+    (criticals ? " · ★ Crítico garantido" : "");
   byId("summary").textContent = summary;
+  byId("summary").classList.toggle("critical",criticals > 0);
   canvas.setAttribute("aria-label","Bandeja. " + summary);
   const faces = types.flatMap(type => {
-    const results = dice.filter(die => die.type === type).map(die => type.faces[die.result] || "vazia");
+    const results = dice.filter(die => die.type === type).map(die => faceLabel(type.faces[die.result]));
     return results.length ? ["d"+type.sides+": "+results.join(", ")] : [];
   }).join(" · ");
-  history = [{summary,faces,time:new Date().toISOString()}, ...history].slice(0,historyLimit);
+  const record = {summary,faces,time:new Date().toISOString()};
+  history = [record,...history.filter(entry => entry !== appliedRecord)].slice(0,historyLimit);
+  appliedRecord = record;
   try { localStorage.setItem(storageKey,JSON.stringify(history)); }
   catch { /* Keep the current session's history in memory. */ }
   renderHistory();
   updateControls();
 }
 
-function animate(now) {
-  started ??= now;
-  const progress = Math.min((now-started)/duration,1);
-  if (progress >= 1) completeRoll();
-  else {
-    render(progress);
-    requestAnimationFrame(animate);
+function beginRoll(indices, focusIndex) {
+  moving = new Set(indices);
+  running = true;
+  byId("hint").hidden = true;
+  byId("die-targets").replaceChildren();
+  byId("summary").textContent = "Rolando…";
+  updateControls();
+  layout();
+  if (reducedMotion.matches) {
+    completeRoll(focusIndex);
+    return;
   }
+  let started;
+  function animate(now) {
+    started ??= now;
+    const progress = Math.min((now-started)/duration,1);
+    if (progress >= 1) completeRoll(focusIndex);
+    else {
+      render(progress);
+      requestAnimationFrame(animate);
+    }
+  }
+  requestAnimationFrame(animate);
 }
 
 const controls = new Map();
+const manualButtons = [];
 function updateControls() {
   const total = selectedCount();
-  for (const [sides, {minus, plus, output, kind}] of controls) {
+  for (const [sides,{minus,plus,output,kind}] of controls) {
     const count = counts.get(sides);
     output.textContent = count;
     minus.disabled = running || count === 0;
-    kind.disabled = plus.disabled = running || total >= maxDice;
+    kind.disabled = plus.disabled = running || total >= maxDice-4;
   }
-  byId("roll").disabled = byId("clear").disabled = running || total === 0;
-  byId("roll").textContent = running ? "Rolando…" : total ? "Rolar "+total+(total===1?" dado":" dados") : "Rolar";
+  for (const {button,input} of skillControls.values()) {
+    button.disabled = input.disabled = running;
+  }
+  for (const button of manualButtons) button.disabled = running || dice.length >= maxDice;
+  byId("clear").disabled = running || !dice.length;
+  byId("base").disabled = running;
+  byId("roll").disabled = running || !selectedSkill;
+  byId("roll").textContent = "Rolar teste · "+(4+total)+" dados";
+  byId("extra-count").textContent = total ? "("+total+")" : "";
 }
 
-function makeButton(label, accessibleLabel, action) {
+function makeButton(label,accessibleLabel,action) {
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = label;
@@ -298,9 +423,49 @@ function makeButton(label, accessibleLabel, action) {
   button.addEventListener("click",action);
   return button;
 }
+
+for (const name of skillNames) {
+  const row = document.createElement("div");
+  row.className = "skill";
+  const button = makeButton(name,"Selecionar perícia "+name,()=>{
+    selectedSkill = name;
+    byId("test-name").textContent = name;
+    byId("setup").hidden = false;
+    for (const [skill,control] of skillControls) {
+      control.button.setAttribute("aria-pressed",skill === name);
+    }
+    updateControls();
+  });
+  button.setAttribute("aria-pressed","false");
+  const input = document.createElement("input");
+  input.type = "number";
+  input.step = "1";
+  input.min = "-1000000";
+  input.max = "1000000";
+  input.required = true;
+  input.value = Object.hasOwn(bonuses,name) && Number.isInteger(bonuses[name]) ? bonuses[name] : 0;
+  input.setAttribute("aria-label","Bônus de "+name);
+  input.addEventListener("change",saveBonuses);
+  row.append(button,input);
+  byId("skills").append(row);
+  skillControls.set(name,{button,input});
+}
 for (const type of types) {
   const {sides,color} = type;
   const name = "d"+sides;
+  const option = document.createElement("option");
+  option.value = sides;
+  option.textContent = name;
+  byId("base").append(option);
+  const manual = makeButton(name,"Rolar e adicionar um "+name,()=>{
+    if (running || dice.length >= maxDice) return;
+    table ??= {name:"Rolagem livre",bonus:0};
+    dice.push(makeDie(type));
+    beginRoll([dice.length-1]);
+  });
+  manual.style.setProperty("--accent",color);
+  manualButtons.push(manual);
+  byId("manual").append(manual);
   const pick = document.createElement("div");
   pick.className = "pick";
   pick.style.setProperty("--accent",color);
@@ -321,26 +486,37 @@ for (const type of types) {
   byId("picker").append(pick);
   controls.set(sides,{kind,minus,plus,output});
 }
+byId("base").value = "6";
 
 byId("clear").addEventListener("click",()=>{
-  for (const sides of counts.keys()) counts.set(sides,0);
+  dice = [];
+  table = appliedRecord = null;
+  byId("hint").hidden = false;
+  byId("summary").textContent = "";
+  canvas.setAttribute("aria-label","Bandeja vazia");
+  layout();
+  render(1);
+  renderTargets();
   updateControls();
 });
 byId("roll").addEventListener("click",()=>{
-  if (running || !selectedCount()) return;
-  dice = types.flatMap(type => Array.from({length:counts.get(type.sides)},()=>makeDie(type)));
-  running = true;
-  started = null;
-  byId("hint").hidden = true;
-  byId("summary").textContent = "Rolando…";
-  updateControls();
-  layout();
-  if (reducedMotion.matches) completeRoll();
-  else requestAnimationFrame(animate);
+  if (running || !selectedSkill) return;
+  const {input} = skillControls.get(selectedSkill);
+  if (!input.reportValidity()) return;
+  const base = types.find(type => type.sides === Number(byId("base").value));
+  table = {name:selectedSkill,bonus:input.valueAsNumber};
+  appliedRecord = null;
+  dice = Array.from({length:4},()=>makeDie(base));
+  for (const type of types) dice.push(...Array.from({length:counts.get(type.sides)},()=>makeDie(type)));
+  beginRoll(dice.map((_,index)=>index));
 });
 new ResizeObserver(()=>{
+  if (canvas.parentElement.clientWidth === trayWidth) return;
   layout();
-  if (!running) render(1);
+  if (!running) {
+    render(1);
+    renderTargets();
+  }
 }).observe(canvas.parentElement);
 updateControls();
 renderHistory();
