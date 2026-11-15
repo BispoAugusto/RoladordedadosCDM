@@ -1,14 +1,14 @@
 {
-  "name": "Rolador de d6",
-  "version": "1.1.1",
+  "name": "Bandeja CDM",
+  "version": "2.0.0",
   "manifest_version": 1,
-  "description": "Rola vários d6 com faces vazias, + e ++ e soma um bônus ao total.",
+  "description": "Bandeja 3D para d4, d6, d8, d10 e d12 com símbolos X, O e P e histórico recente.",
   "icon": "/RoladordedadosCDM/icon.svg",
   "action": {
-    "title": "Rolador de d6",
+    "title": "Bandeja CDM",
     "icon": "/RoladordedadosCDM/icon.svg",
     "popover": "/RoladordedadosCDM/index.html",
-    "width": 320,
-    "height": 400
+    "width": 460,
+    "height": 620
   }
 }
