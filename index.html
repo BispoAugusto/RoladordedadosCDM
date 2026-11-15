@@ -1,73 +1,349 @@
 <!doctype html>
 <html lang="pt-BR">
+<head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rolador de d6</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bandeja CDM</title>
 <style>
-  :root { color-scheme: dark; font: 16px system-ui, sans-serif; }
-  body { margin: 0; background: #171b23; color: #f3f5f9; }
-  main { display: grid; justify-items: center; gap: 14px; padding: 16px; }
-  h1 { margin: 0; font-size: 1.1rem; }
-  form { display: grid; gap: 12px; width: 100%; }
-  .inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  label { display: grid; gap: 4px; font-size: .85rem; }
-  input { box-sizing: border-box; width: 100%; padding: 8px;
-    background: #262e3d; color: inherit; border: 1px solid #7c879b;
-    border-radius: 6px; font: inherit; }
-  button { min-height: 44px; border: 0; border-radius: 8px;
-    background: #b9f3d5; color: #11251b; font: inherit;
-    font-weight: 700; cursor: pointer; }
-  :focus-visible { outline: 2px solid white; outline-offset: 2px; }
-  #faces { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center;
-    max-height: 126px; overflow-y: auto; width: 100%; box-sizing: border-box; }
-  .die { display: grid; place-items: center; width: 34px; height: 34px;
-    border: 1px solid #7c879b; border-radius: 7px; background: #262e3d;
-    font-weight: 700; }
-  #status { margin: 0; text-align: center; overflow-wrap: anywhere; }
+:root{color-scheme:dark;font:15px system-ui,sans-serif;background:#141719;color:#f8efd9}
+*{box-sizing:border-box}body{margin:0}main{max-width:820px;margin:auto;padding:16px;display:grid;gap:14px}
+h1,h2,p{margin:0}h1{font:600 28px Georgia,serif}h2{font-size:15px}
+button{font:inherit;cursor:pointer;color:inherit}button:disabled{cursor:default;opacity:.48}
+button:focus-visible{outline:2px solid #ffe1a2;outline-offset:2px}
+#picker{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px}
+.pick{min-width:0;background:#23272a;border:1px solid #505052;border-radius:8px;padding:5px 2px;text-align:center}
+.kind{width:100%;min-height:36px;border:0;background:transparent;color:var(--accent);font-weight:800}
+.qty{display:flex;justify-content:center;align-items:center;gap:3px}
+.qty button{border:0;border-radius:5px;background:#353a3d;min-width:23px;min-height:29px;padding:0}
+.qty output{min-width:1.3em;font-variant-numeric:tabular-nums}
+.tray{overflow:hidden;border:5px solid #76553f;border-radius:15px;background:radial-gradient(ellipse at 50% 35%,#24554d,#102d28);box-shadow:inset 0 0 24px #061511,0 3px 0 #3f2a21;position:relative}
+canvas{display:block;width:100%}#hint{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:16px;pointer-events:none;color:#dbebdc}#hint[hidden]{display:none}
+.actions{display:flex;gap:8px}.actions button{min-height:42px;border-radius:7px;border:1px solid #5d5a51;padding:6px 12px;background:#282c2e}
+.actions #roll{flex:1;background:#e9c785;border-color:#e9c785;color:#252015;font-weight:800}
+#summary{min-height:1.5em;font-weight:650}.muted,time{color:#bdb8ad}
+ol{list-style:none;margin:7px 0 0;padding:0;display:grid;gap:6px}
+li{background:#23272a;border:1px solid #393d3e;border-radius:7px;padding:8px;display:grid;gap:4px}
+.record{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}.faces{font-size:.83rem;color:#d7d1c4;overflow-wrap:anywhere}
+@media(max-width:310px){main{padding:8px}.qty{gap:1px}.qty button{min-width:20px}}
 </style>
+</head>
+<body>
 <main>
-  <h1>Rolador de d6</h1>
-  <form id="roller">
-    <div class="inputs">
-      <label>Quantidade de dados
-        <input id="count" type="number" min="1" max="100" step="1" value="1" required>
-      </label>
-      <label>Bônus
-        <input id="bonus" type="number" min="-1000000" max="1000000" step="1" value="0" required>
-      </label>
-    </div>
-    <button type="submit">Rolar</button>
-  </form>
-  <div id="faces" role="list" aria-label="Faces roladas"></div>
-  <p id="status" role="status">Cada + vale 1 ponto.</p>
+  <h1>Bandeja CDM</h1>
+  <div id="picker" aria-label="Quantidade por tipo de dado"></div>
+  <div class="actions"><button id="roll" type="button">Rolar</button><button id="clear" type="button">Zerar seleção</button></div>
+  <div class="tray"><canvas id="tray" aria-label="Bandeja com dados tridimensionais"></canvas><p id="hint">Escolha os dados e clique em Rolar.</p></div>
+  <p id="summary" role="status"></p>
+  <section aria-labelledby="history-title"><h2 id="history-title">Rolagens recentes</h2><p id="empty" class="muted">Nenhuma rolagem por enquanto.</p><ol id="history"></ol></section>
 </main>
 <script>
-  const faces = ['', '', '', '+', '+', '++'];
-  const count = document.querySelector('#count');
-  const bonus = document.querySelector('#bonus');
-  const results = document.querySelector('#faces');
-  const status = document.querySelector('#status');
+"use strict";
 
-  document.querySelector('#roller').addEventListener('submit', event => {
-    event.preventDefault();
+const types = [
+  { sides: 4, faces: ["", "", "", "O"], color: "#edb879", rgb: [223, 156, 87] },
+  { sides: 6, faces: ["", "", "", "X", "O", "O"], color: "#91dfcd", rgb: [93, 193, 169] },
+  { sides: 8, faces: ["", "", "", "", "X", "O", "O", "P"], color: "#b9bbff", rgb: [146, 150, 226] },
+  { sides: 10, faces: ["", "", "", "", "", "X", "O", "O", "P", "P"], color: "#ffaaaa", rgb: [225, 139, 139] },
+  { sides: 12, faces: ["", "", "", "", "", "", "X", "O", "O", "P", "P", "P"], color: "#d5e892", rgb: [172, 196, 108] }
+];
+const maxDice = 30;
+const historyLimit = 8;
+const storageKey = "cdm-dice-history-v2";
+const byId = id => document.getElementById(id);
+const counts = new Map(types.map(({sides}) => [sides, 0]));
+const selectedCount = () => [...counts.values()].reduce((sum, value) => sum + value, 0);
+const canvas = byId("tray");
+const ctx = canvas.getContext("2d");
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
-    const dice = document.createDocumentFragment();
-    let points = 0;
-    for (let i = 0; i < count.valueAsNumber; i++) {
-      const face = faces[Math.floor(Math.random() * faces.length)];
-      points += face.length;
-      const die = document.createElement('span');
-      die.className = 'die';
-      die.setAttribute('role', 'listitem');
-      die.setAttribute('aria-label', face || 'Face vazia');
-      die.textContent = face;
-      dice.append(die);
+const add = (a, b) => a.map((value, i) => value + b[i]);
+const sub = (a, b) => a.map((value, i) => value - b[i]);
+const scale = (a, k) => a.map(value => value * k);
+const dot = (a, b) => a.reduce((sum, value, i) => sum + value * b[i], 0);
+const cross = ([x,y,z], [a,b,c]) => [y*c-z*b, z*a-x*c, x*b-y*a];
+const unit = vector => scale(vector, 1 / Math.hypot(...vector));
+const centerOf = points => scale(points.reduce(add, [0,0,0]), 1 / points.length);
+
+// Find supporting planes, then order the vertices around each face.
+function convexFaces(vertices) {
+  const faces = new Map();
+  const epsilon = 1e-5;
+  for (let i = 0; i < vertices.length - 2; i++) {
+    for (let j = i + 1; j < vertices.length - 1; j++) {
+      for (let k = j + 1; k < vertices.length; k++) {
+        const a = vertices[i];
+        const raw = cross(sub(vertices[j], a), sub(vertices[k], a));
+        if (Math.hypot(...raw) < epsilon) continue;
+        let normal = unit(raw);
+        const offsets = vertices.map(vertex => dot(normal, sub(vertex, a)));
+        if (offsets.some(v => v > epsilon) && offsets.some(v => v < -epsilon)) continue;
+        const indices = offsets.flatMap((value, index) => Math.abs(value) < epsilon ? [index] : []);
+        const key = indices.join(",");
+        if (faces.has(key)) continue;
+        if (dot(normal, a) < 0) normal = scale(normal, -1);
+        const points = indices.map(index => vertices[index]);
+        const center = centerOf(points);
+        const x = unit(sub(points[0], center));
+        const y = cross(normal, x);
+        const angle = point => Math.atan2(dot(sub(point, center), y), dot(sub(point, center), x));
+        points.sort((a, b) => angle(a) - angle(b));
+        faces.set(key, { points, center, normal });
+      }
     }
+  }
+  return [...faces.values()];
+}
 
-    results.replaceChildren(dice);
-    const modifier = bonus.valueAsNumber;
-    const sign = modifier < 0 ? '−' : '+';
-    status.textContent = `Total: ${points + modifier} (${points} ${sign} ${Math.abs(modifier)})`;
+function mesh(vertices) {
+  const radius = Math.max(...vertices.map(v => Math.hypot(...v)));
+  return convexFaces(vertices.map(vertex => scale(vertex, 1 / radius)));
+}
+const phi = (1 + Math.sqrt(5)) / 2;
+const signs = [-1, 1];
+const cube = signs.flatMap(x => signs.flatMap(y => signs.map(z => [x,y,z])));
+const ico = signs.flatMap(a => signs.flatMap(b => [[0,a,b*phi],[a,b*phi,0],[b*phi,0,a]]));
+const antiprism = signs.flatMap(z => Array.from({length:5}, (_, i) => {
+  const angle = (2*i + (z > 0 ? 1 : 0)) * Math.PI / 5;
+  return [Math.cos(angle), Math.sin(angle), z * 0.43];
+}));
+const dual = vertices => convexFaces(vertices).map(face => scale(face.normal, 1 / dot(face.normal, face.center)));
+const shapes = new Map([
+  [4, mesh(cube.filter(v => v[0]*v[1]*v[2] === 1))],
+  [6, mesh(cube)],
+  [8, mesh([[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]])],
+  [10, mesh(dual(antiprism))],
+  [12, mesh(dual(ico))]
+]);
+
+function rotate([x,y,z], a, b, c) {
+  const y1 = y*Math.cos(a)-z*Math.sin(a);
+  const z1 = y*Math.sin(a)+z*Math.cos(a);
+  const x2 = x*Math.cos(b)+z1*Math.sin(b);
+  return [x2*Math.cos(c)-y1*Math.sin(c), x2*Math.sin(c)+y1*Math.cos(c), z1*Math.cos(b)-x*Math.sin(b)];
+}
+
+function drawDie(die, x, y, size, a, b, c, settled) {
+  const { shape, basis, type, result } = die;
+  const transform = point => rotate(basis.map(axis => dot(axis, point)), a, b, c);
+  const project = ([px,py,pz]) => {
+    const perspective = size * 3.8 / (3.8 - pz);
+    return [x + px * perspective, y - py * perspective];
+  };
+  ctx.beginPath();
+  ctx.ellipse(x+2,y+size*.66,size*.73,size*.23,0,0,Math.PI*2);
+  ctx.fillStyle = "#061c17a8";
+  ctx.fill();
+  const visible = shape.map((face, index) => ({
+    index, normal: transform(face.normal), points: face.points.map(transform), center: transform(face.center)
+  })).filter(face => dot(face.normal, sub([0,0,3.8], face.center)) > 0)
+    .sort((a,b) => a.center[2] - b.center[2]);
+  for (const face of visible) {
+    const highlighted = settled && face.index === result;
+    const light = highlighted ? 1.12 : .56 + .37 * Math.max(0,dot(face.normal,unit([-.42,.48,1])));
+    ctx.beginPath();
+    face.points.map(project).forEach(([px,py], index) => index ? ctx.lineTo(px,py) : ctx.moveTo(px,py));
+    ctx.closePath();
+    ctx.fillStyle = "rgb(" + type.rgb.map(value => Math.min(255,Math.round(value*light))).join(",") + ")";
+    ctx.strokeStyle = highlighted ? "#fff4ca" : "#152720";
+    ctx.lineWidth = highlighted ? 2.3 : 1.2;
+    ctx.lineJoin = "round";
+    ctx.fill();
+    ctx.stroke();
+    const symbol = type.faces[face.index];
+    if (symbol && face.normal[2] > .40) {
+      const [px,py] = project(face.center);
+      ctx.fillStyle = "#172421";
+      ctx.font = "800 " + Math.round(size * (type.sides >= 10 ? .50 : .65) * (.65 + .35*face.normal[2])) + "px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(symbol,px,py);
+    }
+  }
+  if (settled) {
+    ctx.fillStyle="#e4efdf";
+    ctx.font="600 11px system-ui";
+    ctx.textAlign="center";
+    ctx.textBaseline="middle";
+    ctx.fillText("d"+type.sides,x,y+size+13);
+  }
+}
+
+let dice = [];
+let started = null;
+let running = false;
+let trayWidth = 1;
+let trayHeight = 1;
+let columns = 1;
+let size = 25;
+const duration = 1250;
+function layout() {
+  trayWidth = canvas.parentElement.clientWidth;
+  const capacity = Math.max(1, Math.floor(trayWidth / 76));
+  columns = Math.max(1, Math.min(capacity, dice.length));
+  size = Math.min(30, (trayWidth / columns - 14) / 2);
+  const rows = Math.ceil(dice.length / columns);
+  trayHeight = Math.max(190, rows*87+24);
+  const ratio = Math.min(devicePixelRatio || 1, 2);
+  canvas.style.height = trayHeight + "px";
+  canvas.width = Math.round(trayWidth * ratio);
+  canvas.height = Math.round(trayHeight * ratio);
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+}
+
+function render(progress) {
+  ctx.clearRect(0,0,trayWidth,trayHeight);
+  const rows = Math.ceil(dice.length / columns);
+  dice.forEach((die,index) => {
+    const row = Math.floor(index/columns);
+    const inRow = Math.min(columns,dice.length-row*columns);
+    const spacing = Math.min(95,trayWidth/columns);
+    const targetX = trayWidth/2 + (index%columns-(inRow-1)/2)*spacing;
+    const targetY = (trayHeight-(rows-1)*87)/2 + row*87 - 8;
+    const remaining = 1-progress;
+    const bounce = Math.abs(Math.sin(progress*Math.PI*4))*remaining*27;
+    const startX = trayWidth*(die.direction > 0 ? .16 : .84);
+    const x = targetX + (startX-targetX)*remaining**2 + Math.sin(progress*10+index)*remaining*12;
+    const y = targetY - bounce - remaining**2*25;
+    drawDie(die,x,y,size,remaining**1.6*die.spin,remaining**1.5*die.spin*.8,
+      die.direction*remaining**1.5*die.spin*.65,progress === 1);
   });
+}
+
+function makeDie(type) {
+  const shape = shapes.get(type.sides);
+  const result = Math.floor(Math.random()*type.faces.length);
+  const normal = shape[result].normal;
+  const reference = Math.abs(normal[1]) > .9 ? [1,0,0] : [0,1,0];
+  const x = unit(cross(reference,normal));
+  return {type,shape,result,basis:[x,cross(normal,x),normal],
+    spin:12+Math.random()*8,direction:Math.random()<.5 ? -1 : 1};
+}
+
+function readHistory() {
+  try {
+    const records = JSON.parse(localStorage.getItem(storageKey));
+    if (Array.isArray(records)) return records.slice(0,historyLimit);
+  } catch { /* The embedded browser may block storage. */ }
+  return [];
+}
+let history = readHistory();
+
+function renderHistory() {
+  byId("empty").hidden = history.length > 0;
+  byId("history").replaceChildren(...history.map(record => {
+    const item = document.createElement("li");
+    const header = document.createElement("div");
+    header.className = "record";
+    const total = document.createElement("strong");
+    total.textContent = record.summary;
+    const time = document.createElement("time");
+    time.dateTime = record.time;
+    time.textContent = new Date(record.time).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+    header.append(total,time);
+    const faces = document.createElement("div");
+    faces.className = "faces";
+    faces.textContent = record.faces;
+    item.append(header,faces);
+    return item;
+  }));
+}
+
+function completeRoll() {
+  running = false;
+  render(1);
+  const tally = {"":0,X:0,O:0,P:0};
+  for (const die of dice) tally[die.type.faces[die.result]]++;
+  const summary = tally.X+" X · "+tally.O+" O · "+tally.P+" P · "+tally[""]+" vazias";
+  byId("summary").textContent = summary;
+  canvas.setAttribute("aria-label","Bandeja. " + summary);
+  const faces = types.flatMap(type => {
+    const results = dice.filter(die => die.type === type).map(die => type.faces[die.result] || "vazia");
+    return results.length ? ["d"+type.sides+": "+results.join(", ")] : [];
+  }).join(" · ");
+  history = [{summary,faces,time:new Date().toISOString()}, ...history].slice(0,historyLimit);
+  try { localStorage.setItem(storageKey,JSON.stringify(history)); }
+  catch { /* Keep the current session's history in memory. */ }
+  renderHistory();
+  updateControls();
+}
+
+function animate(now) {
+  started ??= now;
+  const progress = Math.min((now-started)/duration,1);
+  if (progress >= 1) completeRoll();
+  else {
+    render(progress);
+    requestAnimationFrame(animate);
+  }
+}
+
+const controls = new Map();
+function updateControls() {
+  const total = selectedCount();
+  for (const [sides, {minus, plus, output, kind}] of controls) {
+    const count = counts.get(sides);
+    output.textContent = count;
+    minus.disabled = running || count === 0;
+    kind.disabled = plus.disabled = running || total >= maxDice;
+  }
+  byId("roll").disabled = byId("clear").disabled = running || total === 0;
+  byId("roll").textContent = running ? "Rolando…" : total ? "Rolar "+total+(total===1?" dado":" dados") : "Rolar";
+}
+
+function makeButton(label, accessibleLabel, action) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  button.setAttribute("aria-label",accessibleLabel);
+  button.addEventListener("click",action);
+  return button;
+}
+for (const type of types) {
+  const {sides,color} = type;
+  const name = "d"+sides;
+  const pick = document.createElement("div");
+  pick.className = "pick";
+  pick.style.setProperty("--accent",color);
+  const change = delta => {
+    counts.set(sides,counts.get(sides)+delta);
+    updateControls();
+  };
+  const kind = makeButton(name,"Adicionar "+name,()=>change(1));
+  kind.className = "kind";
+  const qty = document.createElement("div");
+  qty.className = "qty";
+  const minus = makeButton("−","Remover "+name,()=>change(-1));
+  const output = document.createElement("output");
+  output.setAttribute("aria-label","Quantidade de "+name);
+  const plus = makeButton("+","Adicionar mais um "+name,()=>change(1));
+  qty.append(minus,output,plus);
+  pick.append(kind,qty);
+  byId("picker").append(pick);
+  controls.set(sides,{kind,minus,plus,output});
+}
+
+byId("clear").addEventListener("click",()=>{
+  for (const sides of counts.keys()) counts.set(sides,0);
+  updateControls();
+});
+byId("roll").addEventListener("click",()=>{
+  if (running || !selectedCount()) return;
+  dice = types.flatMap(type => Array.from({length:counts.get(type.sides)},()=>makeDie(type)));
+  running = true;
+  started = null;
+  byId("hint").hidden = true;
+  byId("summary").textContent = "Rolando…";
+  updateControls();
+  layout();
+  if (reducedMotion.matches) completeRoll();
+  else requestAnimationFrame(animate);
+});
+new ResizeObserver(()=>{
+  layout();
+  if (!running) render(1);
+}).observe(canvas.parentElement);
+updateControls();
+renderHistory();
 </script>
+</body>
 </html>
